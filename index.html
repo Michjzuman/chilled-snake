@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Snake</title>
+        <link rel="stylesheet" href="style.css"/>
+    </head>
+    <body>
+        <canvas id="bg" aria-hidden="true"></canvas>
+
+        <canvas id="game" width="480" height="480" aria-label="Snake game" role="img"></canvas>
+        <div id="hud" aria-hidden="true"></div>
+        <div id="menu" aria-live="polite">
+            <h1>GAME OVER</h1>
+            <div class="summary"></div>
+            <div class="highscores"></div>
+            <button id="playBtn" type="button">Play</button>
+        </div>
+        <script src="script.js"></script>
+    </body>
+</html>
