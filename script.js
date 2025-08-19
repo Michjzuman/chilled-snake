@@ -9,6 +9,7 @@
     const FOOD_FX_MS = 500;              // Food spawn effect duration
     const EAT_FX_MS = 360;               // Wave ring duration after eating
     const SHAKE_MS = 150;               // Screen shake duration on death
+    const SSAA = 1.5;                  // Super-sampling factor for crisper rendering
 
     const HS_KEY = 'snake_highscores_v1';
     const LAST_KEY = 'snake_last_entry_id_v1';
@@ -20,7 +21,8 @@
     const ctx = canvas.getContext("2d");
 
     function setupHiDPI(g) {
-        const ratio = Math.max(1, (window.devicePixelRatio || 1));
+        const dpr = Math.max(1, (window.devicePixelRatio || 1));
+        const ratio = dpr * SSAA; // super-sampled internal resolution
         const gridSize = g || BASE_GRID;
         const cssW = gridSize * TILE;
         const cssH = gridSize * TILE;
@@ -29,6 +31,8 @@
         canvas.width = Math.round(cssW * ratio);
         canvas.height = Math.round(cssH * ratio);
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
     }
 
     window.addEventListener("resize", () => setupHiDPI(state.grid));
@@ -430,6 +434,7 @@
     }
 
     function drawGrid() {
+        ctx.save();
         ctx.beginPath();
         for (let i = 0; i <= state.grid; i++) {
             ctx.moveTo(i * TILE + 0.5, 0);
@@ -438,8 +443,9 @@
             ctx.lineTo(state.grid * TILE, i * TILE + 0.5);
         }
         ctx.lineWidth = 1;
-        ctx.strokeStyle = "#262626";
+        ctx.strokeStyle = "rgba(255,255,255,0.06)";
         ctx.stroke();
+        ctx.restore();
     }
 
     function drawRoundedRect(x, y, w, h, radius) {
@@ -483,10 +489,18 @@
         ctx.fill();
         ctx.restore();
 
+        // subtle drop shadow for the fruit
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = 1.5 * SSAA;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0.8 * SSAA;
+        ctx.restore();
+
         // fruit body
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.filter = `blur(${(1 - p) * 0.6}px)`; // subtle
+        ctx.filter = `blur(${Math.max(0, (1 - p) * 0.4).toFixed(2)}px)`; // a touch of spawn blur
         ctx.fillStyle = "#ff5757";
         drawRoundedRect(cx - w / 2, cy - h / 2, w, h, TILE - margin);
         ctx.restore();
@@ -515,20 +529,36 @@
     }
 
     function renderSnake(points, margin) {
-        ctx.fillStyle = "#ffffff";
-        ctx.strokeStyle = ctx.fillStyle;
-        ctx.lineWidth = TILE - margin;
+        // Build a central path through the segment centers
+        const centers = points.map(p => ({ x: p.x + TILE / 2, y: p.y + TILE / 2 }));
+        if (centers.length < 2) return;
 
-        points.forEach((p, i) => {
-            drawRoundedRect(p.x + margin / 2, p.y + margin / 2, TILE - margin, TILE - margin, TILE - margin);
-            if (i < points.length - 1) {
-                const n = points[i + 1];
-                ctx.beginPath();
-                ctx.moveTo(p.x + TILE / 2, p.y + TILE / 2);
-                ctx.lineTo(n.x + TILE / 2, n.y + TILE / 2);
-                ctx.stroke();
-            }
-        });
+        ctx.save();
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        // Soft drop shadow for depth
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = 2.0 * SSAA;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 1 * SSAA;
+
+        // Wider faint outer stroke as a gentle edge/ambient occlusion
+        ctx.beginPath();
+        ctx.moveTo(centers[0].x, centers[0].y);
+        for (let i = 1; i < centers.length; i++) ctx.lineTo(centers[i].x, centers[i].y);
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.lineWidth = (TILE - margin) + 2;
+        ctx.stroke();
+
+        // Main crisp body stroke
+        ctx.beginPath();
+        ctx.moveTo(centers[0].x, centers[0].y);
+        for (let i = 1; i < centers.length; i++) ctx.lineTo(centers[i].x, centers[i].y);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = (TILE - margin);
+        ctx.stroke();
+        ctx.restore();
     }
 
     function renderEatWave() {

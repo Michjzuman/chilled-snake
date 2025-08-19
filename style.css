@@ -24,7 +24,7 @@ body {
 #game {
     background: #1f1f1f;
     border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55);
     transform: scale(0.9);
     transform-origin: center center;
     border: none;
