@@ -133,6 +133,17 @@
     function onKeyDown(e) {
         const k = e.key.toLowerCase();
         let nd = null;
+        // Toggle fullscreen on 'f'
+        if (k === 'f') {
+            const root = document.documentElement;
+            if (!document.fullscreenElement && root.requestFullscreen) {
+                root.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+            } else if (document.exitFullscreen) {
+                document.exitFullscreen().catch(() => {});
+            }
+            e.preventDefault();
+            return;
+        }
         if (k === "arrowup" || k === "w") nd = { x: 0, y: -1 };
         else if (k === "arrowdown" || k === "s") nd = { x: 0, y: 1 };
         else if (k === "arrowleft" || k === "a") nd = { x: -1, y: 0 };
