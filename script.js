@@ -280,7 +280,7 @@
     }
 
     function growGridIfNeeded() {
-        if (state.snake.length >= state.grid ** 2 * 0.9 && state.grid < 36) {
+        if (state.snake.length >= state.grid ** 2 * 0.7 && state.grid < 36) {
             state.grid += 2;
             state.stepMs = 150 * (15 / state.grid);
             state.snake.forEach(p => { p.x += 1; p.y += 1; });
