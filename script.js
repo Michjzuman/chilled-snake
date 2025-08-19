@@ -413,7 +413,6 @@
             populateWelcomeIfNeeded();
             gameEl.style.transition = 'filter 5s, transform 20s';
             gameEl.style.filter = 'blur(2px) opacity(1)';
-            gameEl.style.transform = shakePrefix + 'scale(0)';
             menuEl.style.filter = 'blur(0)';
             menuEl.style.opacity = 1;
             return;
