@@ -649,43 +649,33 @@
         ctx.closePath();
     }
 
-    // Draw a small direction arrow on the snake's head (modern, clean, smoothed)
+    // Draw a small direction indicator line on the snake's head (modern, clean, smoothed)
     function renderHeadArrow(cx, cy, margin) {
         const ha = state.headArrow;
         if (ha.alpha <= 0.01) return;
 
-        // Arrow sizing relative to tile
         const bodyW = (TILE - margin);
-        const len = bodyW * 0.4;
-        const base = bodyW * 0.4;
+        const len = bodyW * 0.8;      // total indicator length
 
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(ha.ang);
         ctx.globalAlpha = ha.alpha;
 
-        // subtle glow and clean look
+        // clean, subtle depth
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        ctx.shadowColor = 'rgba(0,0,0,0.35)';
-        ctx.shadowBlur = 1.6 * SSAA;
+        ctx.shadowColor = 'rgba(0,0,0,0.28)';
+        ctx.shadowBlur = 1.4 * SSAA;
         ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0.8 * SSAA;
+        ctx.shadowOffsetY = 0.6 * SSAA;
 
-        // Rounded triangle pointing +X in local space
-        const pts = [
-            { x:  len * 0.5, y: 0 },                 // tip
-            { x: -len * 0.5, y: -base * 0.5 },       // back top
-            { x: -len * 0.5, y:  base * 0.5 }        // back bottom
-        ];
-        const cornerR = Math.max(1, (TILE - margin) * 0.12);
-        pathRoundedPolygon(ctx, pts, cornerR);
-
-        // fill + subtle outline
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-        ctx.lineWidth = Math.max(1, TILE * 0.04);
+        // main line pointing +X in local space from head center
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(len * 0.5, 0);
+        ctx.strokeStyle = '#bdbdbd';
+        ctx.lineWidth = Math.max(1, bodyW * 0.18);
         ctx.stroke();
 
         ctx.restore();
