@@ -115,6 +115,7 @@
         // O(1) occupancy + shake
         occupied: new Set(),
         shakeUntil: null,
+        headArrow: { ang: 0, targetAng: 0, alpha: 0 },
     };
 
     // ==========================
@@ -437,6 +438,33 @@
     }
 
     // ==========================
+    // Visual Helpers (Arrow smoothing)
+    // ==========================
+    function angleLerp(a, b, t) {
+        // Normalize to (-PI, PI]
+        const norm = (x) => {
+            x = (x + Math.PI) % (Math.PI * 2);
+            if (x < 0) x += Math.PI * 2;
+            return x - Math.PI;
+        };
+        a = norm(a);
+        b = norm(b);
+        // Smallest signed delta using atan2(sin, cos)
+        const delta = Math.atan2(Math.sin(b - a), Math.cos(b - a));
+        return norm(a + delta * t);
+    }
+
+    function updateHeadArrow(targetAng, visible) {
+        const ha = state.headArrow;
+        ha.targetAng = targetAng;
+        // ease angle and alpha for a modern, smooth transition
+        ha.ang = angleLerp(ha.ang, ha.targetAng, 0.2);
+        const targetAlpha = visible ? 0.9 : 0.0;
+        ha.alpha += (targetAlpha - ha.alpha) * 0.18;
+        // keep stored angle wrapped to avoid long spins after many frames
+        ha.ang = ((ha.ang + Math.PI) % (Math.PI * 2)) - Math.PI;
+    }
+    // ==========================
     // Rendering
     // ==========================
     function clearBoard() {
@@ -589,6 +617,80 @@
         ctx.restore();
     }
 
+    // Draw a rounded-corner polygon using quadratic curves
+    function pathRoundedPolygon(ctx, pts, radius) {
+        const n = pts.length;
+        if (n < 3) return;
+        const r = Math.max(0, radius || 0);
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+            const p0 = pts[(i - 1 + n) % n];
+            const p1 = pts[i];
+            const p2 = pts[(i + 1) % n];
+
+            // vectors from p1 to neighbors
+            const v1x = p0.x - p1.x, v1y = p0.y - p1.y;
+            const v2x = p2.x - p1.x, v2y = p2.y - p1.y;
+            const l1 = Math.hypot(v1x, v1y) || 1;
+            const l2 = Math.hypot(v2x, v2y) || 1;
+            const nv1x = v1x / l1, nv1y = v1y / l1;
+            const nv2x = v2x / l2, nv2y = v2y / l2;
+
+            // clamp corner radius so it doesn't exceed half of the adjacent edges
+            const d1 = Math.min(r, l1 * 0.5);
+            const d2 = Math.min(r, l2 * 0.5);
+
+            const pA = { x: p1.x + nv1x * d1, y: p1.y + nv1y * d1 }; // point before the corner
+            const pB = { x: p1.x + nv2x * d2, y: p1.y + nv2y * d2 }; // point after the corner
+
+            if (i === 0) ctx.moveTo(pA.x, pA.y); else ctx.lineTo(pA.x, pA.y);
+            ctx.quadraticCurveTo(p1.x, p1.y, pB.x, pB.y);
+        }
+        ctx.closePath();
+    }
+
+    // Draw a small direction arrow on the snake's head (modern, clean, smoothed)
+    function renderHeadArrow(cx, cy, margin) {
+        const ha = state.headArrow;
+        if (ha.alpha <= 0.01) return;
+
+        // Arrow sizing relative to tile
+        const bodyW = (TILE - margin);
+        const len = bodyW * 0.4;
+        const base = bodyW * 0.4;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(ha.ang);
+        ctx.globalAlpha = ha.alpha;
+
+        // subtle glow and clean look
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = 1.6 * SSAA;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0.8 * SSAA;
+
+        // Rounded triangle pointing +X in local space
+        const pts = [
+            { x:  len * 0.5, y: 0 },                 // tip
+            { x: -len * 0.5, y: -base * 0.5 },       // back top
+            { x: -len * 0.5, y:  base * 0.5 }        // back bottom
+        ];
+        const cornerR = Math.max(1, (TILE - margin) * 0.12);
+        pathRoundedPolygon(ctx, pts, cornerR);
+
+        // fill + subtle outline
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+        ctx.lineWidth = Math.max(1, TILE * 0.04);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
     function renderFrame() {
         const moved = (state.gameOver || !state.started) ? 1 : Math.min(1, (now() - state.lastStepAt) / state.stepMs);
         const margin = TILE * (12 / 30);
@@ -599,6 +701,18 @@
 
         const snakePoints = computeSnakePoints(moved, margin);
         renderSnake(snakePoints, margin);
+
+        // Head direction arrow (modern, clean, smoothed)
+        const hasSnake = snakePoints.length > 0;
+        const headCx = hasSnake ? (snakePoints[0].x + TILE / 2) : 0;
+        const headCy = hasSnake ? (snakePoints[0].y + TILE / 2) : 0;
+        const nextDir = state.queuedDirs.length ? state.queuedDirs[0] : state.dir;
+        const targetAng = Math.atan2(nextDir.y, nextDir.x);
+        updateHeadArrow(targetAng, hasSnake);
+        if (hasSnake) {
+            renderHeadArrow(headCx, headCy, margin);
+        }
+
         renderEatWave();
 
         const gameEl = $('#game');
