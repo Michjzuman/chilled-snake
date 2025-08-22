@@ -115,7 +115,6 @@
         // O(1) occupancy + shake
         occupied: new Set(),
         shakeUntil: null,
-        headArrow: { ang: 0, targetAng: 0, alpha: 0 },
     };
 
     // ==========================
@@ -438,33 +437,6 @@
     }
 
     // ==========================
-    // Visual Helpers (Arrow smoothing)
-    // ==========================
-    function angleLerp(a, b, t) {
-        // Normalize to (-PI, PI]
-        const norm = (x) => {
-            x = (x + Math.PI) % (Math.PI * 2);
-            if (x < 0) x += Math.PI * 2;
-            return x - Math.PI;
-        };
-        a = norm(a);
-        b = norm(b);
-        // Smallest signed delta using atan2(sin, cos)
-        const delta = Math.atan2(Math.sin(b - a), Math.cos(b - a));
-        return norm(a + delta * t);
-    }
-
-    function updateHeadArrow(targetAng, visible) {
-        const ha = state.headArrow;
-        ha.targetAng = targetAng;
-        // ease angle and alpha for a modern, smooth transition
-        ha.ang = angleLerp(ha.ang, ha.targetAng, 0.2);
-        const targetAlpha = visible ? 0.9 : 0.0;
-        ha.alpha += (targetAlpha - ha.alpha) * 0.18;
-        // keep stored angle wrapped to avoid long spins after many frames
-        ha.ang = ((ha.ang + Math.PI) % (Math.PI * 2)) - Math.PI;
-    }
-    // ==========================
     // Rendering
     // ==========================
     function clearBoard() {
@@ -617,70 +589,6 @@
         ctx.restore();
     }
 
-    // Draw a rounded-corner polygon using quadratic curves
-    function pathRoundedPolygon(ctx, pts, radius) {
-        const n = pts.length;
-        if (n < 3) return;
-        const r = Math.max(0, radius || 0);
-        ctx.beginPath();
-        for (let i = 0; i < n; i++) {
-            const p0 = pts[(i - 1 + n) % n];
-            const p1 = pts[i];
-            const p2 = pts[(i + 1) % n];
-
-            // vectors from p1 to neighbors
-            const v1x = p0.x - p1.x, v1y = p0.y - p1.y;
-            const v2x = p2.x - p1.x, v2y = p2.y - p1.y;
-            const l1 = Math.hypot(v1x, v1y) || 1;
-            const l2 = Math.hypot(v2x, v2y) || 1;
-            const nv1x = v1x / l1, nv1y = v1y / l1;
-            const nv2x = v2x / l2, nv2y = v2y / l2;
-
-            // clamp corner radius so it doesn't exceed half of the adjacent edges
-            const d1 = Math.min(r, l1 * 0.5);
-            const d2 = Math.min(r, l2 * 0.5);
-
-            const pA = { x: p1.x + nv1x * d1, y: p1.y + nv1y * d1 }; // point before the corner
-            const pB = { x: p1.x + nv2x * d2, y: p1.y + nv2y * d2 }; // point after the corner
-
-            if (i === 0) ctx.moveTo(pA.x, pA.y); else ctx.lineTo(pA.x, pA.y);
-            ctx.quadraticCurveTo(p1.x, p1.y, pB.x, pB.y);
-        }
-        ctx.closePath();
-    }
-
-    // Draw a small direction indicator line on the snake's head (modern, clean, smoothed)
-    function renderHeadArrow(cx, cy, margin) {
-        const ha = state.headArrow;
-        if (ha.alpha <= 0.01) return;
-
-        const bodyW = (TILE - margin);
-        const len = bodyW * 0.8;      // total indicator length
-
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(ha.ang);
-        ctx.globalAlpha = ha.alpha;
-
-        // clean, subtle depth
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.shadowColor = 'rgba(0,0,0,0.28)';
-        ctx.shadowBlur = 1.4 * SSAA;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0.6 * SSAA;
-
-        // main line pointing +X in local space from head center
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(len * 0.5, 0);
-        ctx.strokeStyle = '#bdbdbd';
-        ctx.lineWidth = Math.max(1, bodyW * 0.18);
-        ctx.stroke();
-
-        ctx.restore();
-    }
-
     function renderFrame() {
         const moved = (state.gameOver || !state.started) ? 1 : Math.min(1, (now() - state.lastStepAt) / state.stepMs);
         const margin = TILE * (12 / 30);
@@ -691,18 +599,6 @@
 
         const snakePoints = computeSnakePoints(moved, margin);
         renderSnake(snakePoints, margin);
-
-        // Head direction arrow (modern, clean, smoothed)
-        const hasSnake = snakePoints.length > 0;
-        const headCx = hasSnake ? (snakePoints[0].x + TILE / 2) : 0;
-        const headCy = hasSnake ? (snakePoints[0].y + TILE / 2) : 0;
-        const nextDir = state.queuedDirs.length ? state.queuedDirs[0] : state.dir;
-        const targetAng = Math.atan2(nextDir.y, nextDir.x);
-        updateHeadArrow(targetAng, hasSnake);
-        if (hasSnake) {
-            renderHeadArrow(headCx, headCy, margin);
-        }
-
         renderEatWave();
 
         const gameEl = $('#game');
