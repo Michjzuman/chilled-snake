@@ -1,2 +1,2 @@
 # chilled-snake
-Chilled Snake Mac App
+Chilled Snake Game
