@@ -148,7 +148,7 @@
         else if (k === "arrowdown" || k === "s") nd = { x: 0, y: 1 };
         else if (k === "arrowleft" || k === "a") nd = { x: -1, y: 0 };
         else if (k === "arrowright" || k === "d") nd = { x: 1, y: 0 };
-        else if ([" ", "spacebar", "space", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k) && (state.gameOver || !state.started)) {
+        else if ([" ", "spacebar", "space", "r", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k) && (state.gameOver || !state.started)) {
             e.preventDefault();
             resetGame();
             return;
