@@ -415,6 +415,7 @@
             gameEl.style.filter = 'blur(2px) opacity(1)';
             menuEl.style.filter = 'blur(0)';
             menuEl.style.opacity = 1;
+            menuEl.style.pointerEvents = 'auto';
             return;
         }
 
@@ -425,6 +426,7 @@
             gameEl.style.transform = shakePrefix + `scale(${(BASE_GRID / state.grid) * 0.9})`;
             menuEl.style.filter = 'blur(0)';
             menuEl.style.opacity = 1;
+            menuEl.style.pointerEvents = 'auto';
             return;
         }
 
@@ -434,6 +436,7 @@
         gameEl.style.transform = shakePrefix + `scale(${BASE_GRID / state.grid})`;
         menuEl.style.filter = 'blur(10px)';
         menuEl.style.opacity = 0;
+        menuEl.style.pointerEvents = 'none';
     }
 
     // ==========================
