@@ -26,11 +26,14 @@
         const gridSize = g || BASE_GRID;
         const cssW = gridSize * TILE;
         const cssH = gridSize * TILE;
+        const displayScale = BASE_GRID / gridSize; // match CSS transform scaling to avoid blurring
+        const targetW = Math.round(cssW * ratio * displayScale);
+        const targetH = Math.round(cssH * ratio * displayScale);
         canvas.style.width = cssW + "px";
         canvas.style.height = cssH + "px";
-        canvas.width = Math.round(cssW * ratio);
-        canvas.height = Math.round(cssH * ratio);
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        canvas.width = targetW;
+        canvas.height = targetH;
+        ctx.setTransform(ratio * displayScale, 0, 0, ratio * displayScale, 0, 0);
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
     }
@@ -132,7 +135,8 @@
 
     function onKeyDown(e) {
         const k = e.key.toLowerCase();
-        let nd = null;
+        const restartKeys = [" ", "spacebar", "space", "r", "arrowup", "arrowdown", "arrowleft", "arrowright"];
+
         // Toggle fullscreen on 'f'
         if (k === 'f') {
             const root = document.documentElement;
@@ -144,15 +148,27 @@
             e.preventDefault();
             return;
         }
+
+        // Start/restart when game over or before first start
+        if (restartKeys.includes(k) && (state.gameOver || !state.started)) {
+            e.preventDefault();
+            const dirAfterReset = (
+                k === "arrowup" ? { x: 0, y: -1 } :
+                k === "arrowdown" ? { x: 0, y: 1 } :
+                k === "arrowleft" ? { x: -1, y: 0 } :
+                k === "arrowright" ? { x: 1, y: 0 } :
+                null
+            );
+            resetGame();
+            if (dirAfterReset) queueDir(dirAfterReset);
+            return;
+        }
+
+        let nd = null;
         if (k === "arrowup" || k === "w") nd = { x: 0, y: -1 };
         else if (k === "arrowdown" || k === "s") nd = { x: 0, y: 1 };
         else if (k === "arrowleft" || k === "a") nd = { x: -1, y: 0 };
         else if (k === "arrowright" || k === "d") nd = { x: 1, y: 0 };
-        else if ([" ", "spacebar", "space", "r", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k) && (state.gameOver || !state.started)) {
-            e.preventDefault();
-            resetGame();
-            return;
-        }
         if (!nd) return;
 
         queueDir(nd);
@@ -368,6 +384,8 @@
         if (!state.gameOver || state.menuPopulated) return;
         const menu = $('#menu');
         if (!menu) return;
+        const title = menu.querySelector('h1');
+        if (title) title.textContent = 'GAME OVER';
 
         const duration = (state.endedAt ?? now()) - state.runStartAt;
         const hs = addHighscore({ score: state.score, timeMs: duration });
@@ -502,16 +520,12 @@
         ctx.fill();
         ctx.restore();
 
-        // subtle drop shadow for the fruit
+        // fruit body with subtle drop shadow
         ctx.save();
         ctx.shadowColor = 'rgba(0,0,0,0.35)';
         ctx.shadowBlur = 1.5 * SSAA;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0.8 * SSAA;
-        ctx.restore();
-
-        // fruit body
-        ctx.save();
         ctx.globalAlpha = alpha;
         ctx.filter = `blur(${Math.max(0, (1 - p) * 0.4).toFixed(2)}px)`; // a touch of spawn blur
         ctx.fillStyle = "#ff5757";
