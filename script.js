@@ -10,6 +10,7 @@
     const EAT_FX_MS = 360;               // Wave ring duration after eating
     const SHAKE_MS = 150;               // Screen shake duration on death
     const SSAA = 1.5;                  // Super-sampling factor for crisper rendering
+    const MAX_RENDER_RATIO = 2.5;      // Clamp super-sampling for smoother perf on zoom
 
     const HS_KEY = 'snake_highscores_v1';
     const LAST_KEY = 'snake_last_entry_id_v1';
@@ -20,15 +21,22 @@
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
 
+    let lastDprQuery = null;
+    let dprChangeHandler = null;
+    let lastHiDpiSignature = null;
+
     function setupHiDPI(g) {
         const dpr = Math.max(1, (window.devicePixelRatio || 1));
-        const ratio = dpr * SSAA; // super-sampled internal resolution
+        const ratio = Math.min(MAX_RENDER_RATIO, dpr * SSAA); // super-sampled internal resolution
         const gridSize = g || BASE_GRID;
         const cssW = gridSize * TILE;
         const cssH = gridSize * TILE;
         const displayScale = BASE_GRID / gridSize; // match CSS transform scaling to avoid blurring
         const targetW = Math.round(cssW * ratio * displayScale);
         const targetH = Math.round(cssH * ratio * displayScale);
+        const signature = `${gridSize}|${targetW}x${targetH}`;
+        if (signature === lastHiDpiSignature) return;
+
         canvas.style.width = cssW + "px";
         canvas.style.height = cssH + "px";
         canvas.width = targetW;
@@ -36,9 +44,33 @@
         ctx.setTransform(ratio * displayScale, 0, 0, ratio * displayScale, 0, 0);
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+        lastHiDpiSignature = signature;
     }
 
-    window.addEventListener("resize", () => setupHiDPI(state.grid));
+    function watchDprChanges() {
+        const dpr = Math.max(1, (window.devicePixelRatio || 1));
+        const query = `(resolution: ${dpr}dppx)`;
+        if (lastDprQuery && dprChangeHandler) lastDprQuery.removeEventListener('change', dprChangeHandler);
+        lastDprQuery = window.matchMedia ? window.matchMedia(query) : null;
+        if (lastDprQuery) {
+            dprChangeHandler = () => {
+                lastHiDpiSignature = null; // force recalculation on zoom change
+                setupHiDPI(state.grid);
+                watchDprChanges();
+            };
+            lastDprQuery.addEventListener('change', dprChangeHandler);
+        }
+    }
+
+    let resizeRaf = null;
+    window.addEventListener("resize", () => {
+        if (resizeRaf) cancelAnimationFrame(resizeRaf);
+        resizeRaf = requestAnimationFrame(() => {
+            lastHiDpiSignature = null; // allow recompute after size changes
+            setupHiDPI(state.grid);
+            resizeRaf = null;
+        });
+    });
 
     // ==========================
     // Utilities
@@ -115,6 +147,8 @@
         // UI flags
         menuPopulated: false,
         welcomePopulated: false,
+        showScore: true,
+        lastHud: null,
         // O(1) occupancy + shake
         occupied: new Set(),
         shakeUntil: null,
@@ -135,7 +169,7 @@
 
     function onKeyDown(e) {
         const k = e.key.toLowerCase();
-        const restartKeys = [" ", "spacebar", "space", "r", "arrowup", "arrowdown", "arrowleft", "arrowright"];
+        const restartKeys = [" ", "spacebar", "space"];
 
         // Toggle fullscreen on 'f'
         if (k === 'f') {
@@ -149,18 +183,17 @@
             return;
         }
 
-        // Start/restart when game over or before first start
+        if (k === 'z') {
+            state.showScore = !state.showScore;
+            state.lastHud = null; // force redraw
+            e.preventDefault();
+            return;
+        }
+
+        // Start/restart when game over or before first start (space or button only)
         if (restartKeys.includes(k) && (state.gameOver || !state.started)) {
             e.preventDefault();
-            const dirAfterReset = (
-                k === "arrowup" ? { x: 0, y: -1 } :
-                k === "arrowdown" ? { x: 0, y: 1 } :
-                k === "arrowleft" ? { x: -1, y: 0 } :
-                k === "arrowright" ? { x: 1, y: 0 } :
-                null
-            );
             resetGame();
-            if (dirAfterReset) queueDir(dirAfterReset);
             return;
         }
 
@@ -210,10 +243,11 @@
 
         let nd = null;
         if (Math.abs(dx) < THRESH && Math.abs(dy) < THRESH) {
-            if (state.gameOver || !state.started) {
-                resetGame();
-            }
-            if (e.cancelable) e.preventDefault();
+            touchStartX = touchStartY = null;
+            return;
+        }
+
+        if (!state.started || state.gameOver) {
             touchStartX = touchStartY = null;
             return;
         }
@@ -254,6 +288,7 @@
         state.foodFxAt = now();
         state.eatWave = null;
         state.shakeUntil = null;
+        state.lastHud = null;
         setupHiDPI(state.grid);
     }
 
@@ -415,10 +450,13 @@
         state.menuPopulated = true;
     }
 
+    let lastTransformSignature = null;
+
     function setGameTransform(gameEl, menuEl) {
+        const shaking = state.shakeUntil && now() < state.shakeUntil;
         // compute optional shake translate
         let shakePrefix = "";
-        if (state.shakeUntil && now() < state.shakeUntil) {
+        if (shaking) {
             const tLeft = state.shakeUntil - now();
             const p = Math.max(0, Math.min(1, tLeft / SHAKE_MS));
             const amp = 4 * p; // max ~4px, easing out
@@ -427,7 +465,12 @@
             shakePrefix = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) `;
         }
 
-        if (!state.started) {
+        const mode = !state.started ? 'welcome' : state.gameOver ? 'gameOver' : 'playing';
+        const sig = `${mode}|${state.grid}|${shaking}`;
+        if (!shaking && sig === lastTransformSignature) return;
+        lastTransformSignature = sig;
+
+        if (mode === 'welcome') {
             populateWelcomeIfNeeded();
             gameEl.style.transition = 'filter 5s, transform 20s';
             gameEl.style.filter = 'blur(2px) opacity(1)';
@@ -437,7 +480,7 @@
             return;
         }
 
-        if (state.gameOver) {
+        if (mode === 'gameOver') {
             populateMenuIfNeeded();
             gameEl.style.transition = 'filter 5s, transform 20s';
             gameEl.style.filter = 'blur(2px) opacity(0.5)';
@@ -606,6 +649,18 @@
         ctx.restore();
     }
 
+    function renderHud() {
+        const hud = $('#hud');
+        if (!hud) return;
+        const shouldShow = state.showScore;
+        const text = `Score: ${state.score}`;
+        const signature = `${shouldShow ? text : ''}|${shouldShow}`;
+        if (signature === state.lastHud) return;
+        state.lastHud = signature;
+        hud.textContent = shouldShow ? text : '';
+        hud.classList.toggle('hidden', !shouldShow);
+    }
+
     function renderFrame() {
         const moved = (state.gameOver || !state.started) ? 1 : Math.min(1, (now() - state.lastStepAt) / state.stepMs);
         const margin = TILE * (12 / 30);
@@ -617,6 +672,7 @@
         const snakePoints = computeSnakePoints(moved, margin);
         renderSnake(snakePoints, margin);
         renderEatWave();
+        renderHud();
 
         const gameEl = $('#game');
         const menuEl = $('#menu');
@@ -645,6 +701,7 @@
         document.addEventListener('touchstart', onTouchStart, { passive: false });
         document.addEventListener('touchmove', onTouchMove, { passive: false });
         document.addEventListener('touchend', onTouchEnd, { passive: false });
+        watchDprChanges();
         setupHiDPI(BASE_GRID);
         // initial state: show welcome
         resetToWelcome();
@@ -674,6 +731,7 @@
         state.foodFxAt = null;       // prevent pre-start food spawn effect
         state.eatWave = null;
         state.shakeUntil = null;
+        state.lastHud = null;
         setupHiDPI(state.grid);
     }
 
