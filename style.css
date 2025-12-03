@@ -37,8 +37,23 @@ body {
     position: fixed;
     top: 16px;
     left: 16px;
-    opacity: 0.9;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    backdrop-filter: blur(10px) saturate(1.2);
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    opacity: 0.92;
     font-weight: 600;
+    letter-spacing: 0.02em;
+    font-size: 14px;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+}
+
+#hud.hidden {
+    opacity: 0;
+    transform: translateY(-4px);
 }
 
 #menu {
