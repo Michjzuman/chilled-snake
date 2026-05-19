@@ -25,12 +25,10 @@ body {
     background: #1f1f1f;
     border-radius: 12px;
     box-shadow: 0 12px 40px rgba(0,0,0,0.55);
-    transform: scale(0.9);
     transform-origin: center center;
     border: none;
     outline: 1px solid #2a2a2a;
     outline-offset: 0;
-    transform-origin: center center;
 }
 
 #hud {

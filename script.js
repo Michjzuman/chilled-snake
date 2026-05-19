@@ -29,16 +29,16 @@
         const dpr = Math.max(1, (window.devicePixelRatio || 1));
         const ratio = Math.min(MAX_RENDER_RATIO, dpr * SSAA); // super-sampled internal resolution
         const gridSize = g || BASE_GRID;
-        const cssW = gridSize * TILE;
-        const cssH = gridSize * TILE;
-        const displayScale = BASE_GRID / gridSize; // match CSS transform scaling to avoid blurring
-        const targetW = Math.round(cssW * ratio * displayScale);
-        const targetH = Math.round(cssH * ratio * displayScale);
+        const displayW = BASE_GRID * TILE;
+        const displayH = BASE_GRID * TILE;
+        const displayScale = BASE_GRID / gridSize;
+        const targetW = Math.round(displayW * ratio);
+        const targetH = Math.round(displayH * ratio);
         const signature = `${gridSize}|${targetW}x${targetH}`;
         if (signature === lastHiDpiSignature) return;
 
-        canvas.style.width = cssW + "px";
-        canvas.style.height = cssH + "px";
+        canvas.style.width = displayW + "px";
+        canvas.style.height = displayH + "px";
         canvas.width = targetW;
         canvas.height = targetH;
         ctx.setTransform(ratio * displayScale, 0, 0, ratio * displayScale, 0, 0);
@@ -472,8 +472,9 @@
 
         if (mode === 'welcome') {
             populateWelcomeIfNeeded();
-            gameEl.style.transition = 'filter 5s, transform 20s';
+            gameEl.style.transition = 'filter 5s, transform 0s';
             gameEl.style.filter = 'blur(2px) opacity(1)';
+            gameEl.style.transform = 'none';
             menuEl.style.filter = 'blur(0)';
             menuEl.style.opacity = 1;
             menuEl.style.pointerEvents = 'auto';
@@ -482,9 +483,9 @@
 
         if (mode === 'gameOver') {
             populateMenuIfNeeded();
-            gameEl.style.transition = 'filter 5s, transform 20s';
+            gameEl.style.transition = 'filter 5s, transform 0s';
             gameEl.style.filter = 'blur(2px) opacity(0.5)';
-            gameEl.style.transform = shakePrefix + `scale(${(BASE_GRID / state.grid) * 0.9})`;
+            gameEl.style.transform = shakePrefix || 'none';
             menuEl.style.filter = 'blur(0)';
             menuEl.style.opacity = 1;
             menuEl.style.pointerEvents = 'auto';
@@ -492,9 +493,9 @@
         }
 
         // playing
-        gameEl.style.transition = 'filter 0s, transform 2s';
+        gameEl.style.transition = 'filter 0s, transform 0s';
         gameEl.style.filter = 'blur(0) opacity(1)';
-        gameEl.style.transform = shakePrefix + `scale(${BASE_GRID / state.grid})`;
+        gameEl.style.transform = shakePrefix || 'none';
         menuEl.style.filter = 'blur(10px)';
         menuEl.style.opacity = 0;
         menuEl.style.pointerEvents = 'none';
@@ -653,7 +654,7 @@
         const hud = $('#hud');
         if (!hud) return;
         const shouldShow = state.showScore;
-        const text = `Score: ${state.score}`;
+        const text = state.score;
         const signature = `${shouldShow ? text : ''}|${shouldShow}`;
         if (signature === state.lastHud) return;
         state.lastHud = signature;
