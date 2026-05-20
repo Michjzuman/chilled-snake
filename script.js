@@ -24,27 +24,75 @@
     let lastDprQuery = null;
     let dprChangeHandler = null;
     let lastHiDpiSignature = null;
+    let renderRatio = 1;
+    let renderGrid = BASE_GRID;
+    let currentBoardScale = 1;
+    let boardScaleAnim = null;
 
-    function setupHiDPI(g) {
+    function boardScaleForGrid(g) {
+        return BASE_GRID / (g || BASE_GRID);
+    }
+
+    function animatedBoardScale() {
+        if (!boardScaleAnim) return currentBoardScale;
+        const t = clamp01((now() - boardScaleAnim.startedAt) / boardScaleAnim.duration);
+        const p = easeOutCubic(t);
+        currentBoardScale = boardScaleAnim.from + (boardScaleAnim.to - boardScaleAnim.from) * p;
+        if (t >= 1) {
+            currentBoardScale = boardScaleAnim.to;
+            boardScaleAnim = null;
+        }
+        return currentBoardScale;
+    }
+
+    function setBoardScale(g, animate) {
+        const target = boardScaleForGrid(g);
+        if (!animate) {
+            currentBoardScale = target;
+            boardScaleAnim = null;
+            return;
+        }
+        const from = animatedBoardScale();
+        if (Math.abs(from - target) < 0.0001) return;
+        boardScaleAnim = {
+            from,
+            to: target,
+            startedAt: now(),
+            duration: 2000,
+        };
+    }
+
+    function applyRenderTransform() {
+        const scale = animatedBoardScale();
+        const displaySize = BASE_GRID * TILE;
+        const scaledBoardSize = renderGrid * TILE * scale;
+        const offset = (displaySize - scaledBoardSize) / 2;
+        ctx.setTransform(renderRatio * scale, 0, 0, renderRatio * scale, renderRatio * offset, renderRatio * offset);
+    }
+
+    function setupHiDPI(g, animateScale = false) {
         const dpr = Math.max(1, (window.devicePixelRatio || 1));
-        const ratio = Math.min(MAX_RENDER_RATIO, dpr * SSAA); // super-sampled internal resolution
-        const gridSize = g || BASE_GRID;
+        renderRatio = Math.min(MAX_RENDER_RATIO, dpr * SSAA); // super-sampled internal resolution
+        renderGrid = g || BASE_GRID;
         const displayW = BASE_GRID * TILE;
         const displayH = BASE_GRID * TILE;
-        const displayScale = BASE_GRID / gridSize;
-        const targetW = Math.round(displayW * ratio);
-        const targetH = Math.round(displayH * ratio);
-        const signature = `${gridSize}|${targetW}x${targetH}`;
-        if (signature === lastHiDpiSignature) return;
+        const targetW = Math.round(displayW * renderRatio);
+        const targetH = Math.round(displayH * renderRatio);
+        const signature = `${targetW}x${targetH}`;
 
-        canvas.style.width = displayW + "px";
-        canvas.style.height = displayH + "px";
-        canvas.width = targetW;
-        canvas.height = targetH;
-        ctx.setTransform(ratio * displayScale, 0, 0, ratio * displayScale, 0, 0);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        lastHiDpiSignature = signature;
+        setBoardScale(g, animateScale);
+
+        if (signature !== lastHiDpiSignature) {
+            canvas.style.width = displayW + "px";
+            canvas.style.height = displayH + "px";
+            canvas.width = targetW;
+            canvas.height = targetH;
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            lastHiDpiSignature = signature;
+        }
+
+        applyRenderTransform();
     }
 
     function watchDprChanges() {
@@ -137,6 +185,7 @@
         score: 0,
         lastStepAt: 0,
         gameOver: false,
+        won: false,
         ateOnLastStep: false,
         runStartAt: 0,
         endedAt: null,
@@ -191,7 +240,7 @@
         }
 
         // Start/restart when game over or before first start (space or button only)
-        if (restartKeys.includes(k) && (state.gameOver || !state.started)) {
+        if (restartKeys.includes(k) && (state.gameOver || state.won || !state.started)) {
             e.preventDefault();
             resetGame();
             return;
@@ -247,7 +296,7 @@
             return;
         }
 
-        if (!state.started || state.gameOver) {
+        if (!state.started || state.gameOver || state.won) {
             touchStartX = touchStartY = null;
             return;
         }
@@ -279,6 +328,7 @@
         state.score = 0;
         state.lastStepAt = 0;
         state.gameOver = false;
+        state.won = false;
         state.ateOnLastStep = false;
         state.runStartAt = now();
         state.endedAt = null;
@@ -292,16 +342,22 @@
         setupHiDPI(state.grid);
     }
 
-    function spawnFood() {
-        while (true) {
-            const x = (Math.random() * state.grid) | 0;
-            const y = (Math.random() * state.grid) | 0;
-            if (!state.occupied || !state.occupied.has(posKey(x, y))) {
-                const pos = { x, y };
-                state.foodFxAt = now();
-                return pos;
+    function findFreeCell(grid, occupied, random = Math.random) {
+        const free = [];
+        for (let y = 0; y < grid; y += 1) {
+            for (let x = 0; x < grid; x += 1) {
+                if (!occupied || !occupied.has(posKey(x, y))) free.push({ x, y });
             }
         }
+        if (!free.length) return null;
+        return free[(random() * free.length) | 0];
+    }
+
+    function spawnFood() {
+        const pos = findFreeCell(state.grid, state.occupied);
+        if (!pos) return null;
+        state.foodFxAt = now();
+        return pos;
     }
 
     // ==========================
@@ -338,7 +394,7 @@
             // rebuild occupied because positions changed
             state.occupied = new Set();
             state.snake.forEach(p => state.occupied.add(posKey(p.x, p.y)));
-            setupHiDPI(state.grid);
+            setupHiDPI(state.grid, true);
         }
     }
 
@@ -352,7 +408,7 @@
         consumeDirectionQueue();
 
         const { x: nx, y: ny } = nextHead();
-        const willEat = (nx === state.food.x && ny === state.food.y);
+        const willEat = state.food && (nx === state.food.x && ny === state.food.y);
 
         if (isWallCollision(nx, ny) || isSelfCollision(nx, ny, willEat)) {
             state.gameOver = true;
@@ -376,6 +432,11 @@
 
             state.food = spawnFood();
             state.ateOnLastStep = true; // keep tail still this frame
+            if (!state.food) {
+                state.won = true;
+                state.endedAt = now();
+                return;
+            }
         } else {
             const tail = state.snake.pop();
             if (state.occupied && tail) state.occupied.delete(posKey(tail.x, tail.y));
@@ -396,10 +457,7 @@
         const btn = $('#playBtn');
         menu.querySelector('h1').textContent = 'SNAKE';
         if (summaryEl) {
-            summaryEl.innerHTML = `
-                <div class="label">Controls</div><div>Arrows / WASD</div>
-                <div class="label">Start</div><div>Press Play or Space</div>
-            `;
+            summaryEl.innerHTML = '';
         }
         if (hsEl) {
             const hs = loadHighscores();
@@ -416,11 +474,11 @@
     }
 
     function populateMenuIfNeeded() {
-        if (!state.gameOver || state.menuPopulated) return;
+        if ((!state.gameOver && !state.won) || state.menuPopulated) return;
         const menu = $('#menu');
         if (!menu) return;
         const title = menu.querySelector('h1');
-        if (title) title.textContent = 'GAME OVER';
+        if (title) title.textContent = state.won ? 'YOU WON' : 'GAME OVER';
 
         const duration = (state.endedAt ?? now()) - state.runStartAt;
         const hs = addHighscore({ score: state.score, timeMs: duration });
@@ -465,7 +523,7 @@
             shakePrefix = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) `;
         }
 
-        const mode = !state.started ? 'welcome' : state.gameOver ? 'gameOver' : 'playing';
+        const mode = !state.started ? 'welcome' : (state.gameOver || state.won) ? 'gameOver' : 'playing';
         const sig = `${mode}|${state.grid}|${shaking}`;
         if (!shaking && sig === lastTransformSignature) return;
         lastTransformSignature = sig;
@@ -505,7 +563,10 @@
     // Rendering
     // ==========================
     function clearBoard() {
-        ctx.clearRect(0, 0, state.grid * TILE, state.grid * TILE);
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
     }
 
     function drawGrid() {
@@ -541,6 +602,7 @@
     }
 
     function renderFood(margin) {
+        if (!state.food) return;
         const t = state.foodFxAt ? (now() - state.foodFxAt) : FOOD_FX_MS;
         const raw = clamp01(t / FOOD_FX_MS);
         const p = easeOutCubic(raw);
@@ -663,9 +725,10 @@
     }
 
     function renderFrame() {
-        const moved = (state.gameOver || !state.started) ? 1 : Math.min(1, (now() - state.lastStepAt) / state.stepMs);
+        const moved = (state.gameOver || state.won || !state.started) ? 1 : Math.min(1, (now() - state.lastStepAt) / state.stepMs);
         const margin = TILE * (12 / 30);
 
+        applyRenderTransform();
         clearBoard();
         drawGrid();
         renderFood(margin);
@@ -685,7 +748,7 @@
     // ==========================
     function loop(ts) {
         if (!state.lastStepAt) state.lastStepAt = ts;
-        if (state.started && !state.gameOver && ts - state.lastStepAt >= state.stepMs) {
+        if (state.started && !state.gameOver && !state.won && ts - state.lastStepAt >= state.stepMs) {
             state.lastStepAt = ts;
             step();
         }
@@ -723,6 +786,7 @@
         state.score = 0;
         state.lastStepAt = 0;
         state.gameOver = false;
+        state.won = false;
         state.ateOnLastStep = false;
         state.runStartAt = now();
         state.endedAt = null;
@@ -735,6 +799,8 @@
         state.lastHud = null;
         setupHiDPI(state.grid);
     }
+
+    if (window.__snakeTestEnabled) window.__snakeTest = { findFreeCell };
 
     // Start
     bootstrap();
