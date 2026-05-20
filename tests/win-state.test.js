@@ -113,5 +113,15 @@ assert.strictEqual(
   JSON.stringify({ x: 1, y: 1 }),
   'snake head should move into the old tail cell'
 );
+assert.strictEqual(
+  tailMoveState.snake.length,
+  4,
+  'moving without eating should keep the snake length unchanged'
+);
+assert.notStrictEqual(
+  JSON.stringify(tailMoveState.snake[0]),
+  JSON.stringify(tailMoveState.snake[1]),
+  'moving without eating should not duplicate the head segment'
+);
 
 console.log('win-state tests passed');

@@ -427,11 +427,11 @@
             return;
         }
 
-        // move head
-        state.snake.unshift({ x: nx, y: ny });
-        if (state.occupied) state.occupied.add(posKey(nx, ny));
-
         if (willEat) {
+            // move head and keep tail because the snake grows
+            state.snake.unshift({ x: nx, y: ny });
+            if (state.occupied) state.occupied.add(posKey(nx, ny));
+
             state.score += 1;
             growGridIfNeeded();
 
