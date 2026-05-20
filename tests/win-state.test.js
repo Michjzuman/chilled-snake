@@ -93,4 +93,25 @@ assert.strictEqual(
   'findFreeCell should return the only free cell'
 );
 
+const tailMoveState = {
+  snake: [
+    { x: 2, y: 1 },
+    { x: 2, y: 2 },
+    { x: 1, y: 2 },
+    { x: 1, y: 1 },
+  ],
+  occupied: new Set(['2,1', '2,2', '1,2', '1,1']),
+};
+
+game.__snakeTest.moveWithoutEating(tailMoveState, 1, 1);
+assert(
+  tailMoveState.occupied.has('1,1'),
+  'occupied should still contain the head when moving into the old tail cell'
+);
+assert.strictEqual(
+  JSON.stringify(tailMoveState.snake[0]),
+  JSON.stringify({ x: 1, y: 1 }),
+  'snake head should move into the old tail cell'
+);
+
 console.log('win-state tests passed');

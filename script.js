@@ -360,6 +360,16 @@
         return pos;
     }
 
+    function moveWithoutEating(targetState, nx, ny) {
+        targetState.snake.unshift({ x: nx, y: ny });
+        if (targetState.occupied) targetState.occupied.add(posKey(nx, ny));
+
+        const tail = targetState.snake.pop();
+        if (targetState.occupied && tail && !(tail.x === nx && tail.y === ny)) {
+            targetState.occupied.delete(posKey(tail.x, tail.y));
+        }
+    }
+
     // ==========================
     // Update Step
     // ==========================
@@ -438,8 +448,7 @@
                 return;
             }
         } else {
-            const tail = state.snake.pop();
-            if (state.occupied && tail) state.occupied.delete(posKey(tail.x, tail.y));
+            moveWithoutEating(state, nx, ny);
         }
     }
 
@@ -774,7 +783,7 @@
 
     function resetToWelcome() {
         // Use reset mechanics but keep not-started state for welcome screen
-        state.grid = 10;
+        state.grid = 8;
         state.stepMs = 150 * (15 / state.grid);
         state.snake = [ { x: 3, y: 3 }, { x: 2, y: 3 }, { x: 1, y: 3 } ];
         state.dir = { x: 1, y: 0 };
@@ -800,7 +809,7 @@
         setupHiDPI(state.grid);
     }
 
-    if (window.__snakeTestEnabled) window.__snakeTest = { findFreeCell };
+    if (window.__snakeTestEnabled) window.__snakeTest = { findFreeCell, moveWithoutEating };
 
     // Start
     bootstrap();
